@@ -2,6 +2,8 @@ import json
 import urllib3
 import certifi
 import datetime
+import unittest
+import numbers
 
 
 class StockTracker:
@@ -24,7 +26,6 @@ class StockTracker:
         ts = datetime.datetime.now().timestamp()
         if (ts-self.timestamp) > 60:
             # Debug purpose print to verify that we only refresh when necessary
-            # print("Refreshing...")
             r = self.http.request('GET', self.stockIntraDayUrl)
             self.data = json.loads(r.data.decode('utf-8'))
             self.timestamp = datetime.datetime.now().timestamp()
@@ -43,10 +44,25 @@ class StockTracker:
         return (float(lastMinute["1. open"]) + float(lastMinute["4. close"])) / 2
 
 
-# This code is for debugging purposes only.
-# When the Class is run on it's own this code will execute
+class TestStockTracker(unittest.TestCase):
+
+    def setUp(self):
+        self.s = StockTracker('SEB-A')
+
+    def test_show(self):
+        m = self.s.show()
+        self.assertEqual(m["2. Symbol"], 'SEB-A')
+        self.assertEqual(m["4. Interval"], '1min')
+        self.assertEqual(m["1. Information"], 'Intraday (1min) prices and volumes')
+
+    def test_lastAveragePrice(self):
+        self.assertTrue(isinstance(self.s.lastAveragePrice(), numbers.Real))
+
+    def tearDown(self):
+        pass
+
+
 if __name__ == "__main__":
-    s = StockTracker('SEB-A')
-    print(s.stockIntraDayUrl)
-    print(s.show())
-    print(s.lastAveragePrice())
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestStockTracker)
+    runner = unittest.TextTestRunner(verbosity=3)
+    result = runner.run(suite)
