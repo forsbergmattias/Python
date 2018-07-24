@@ -4,6 +4,7 @@ import certifi
 import datetime
 import unittest
 import numbers
+from time import sleep
 
 
 class StockTracker:
@@ -14,6 +15,7 @@ class StockTracker:
     timestamp = 0
 
     def __init__(self, symbol):
+        self.symbol = symbol
         self.stockIntraDayUrl = self.stockIntraDayUrl.format(symbol, self.apiKey)
         self.http = urllib3.PoolManager(
             cert_reqs='CERT_REQUIRED',
@@ -25,9 +27,19 @@ class StockTracker:
         # Make sure that we don't refresh more often than necessary
         ts = datetime.datetime.now().timestamp()
         if (ts-self.timestamp) > 60:
-            # Debug purpose print to verify that we only refresh when necessary
-            r = self.http.request('GET', self.stockIntraDayUrl)
-            self.data = json.loads(r.data.decode('utf-8'))
+            if self.symbol == "TestCase1":
+                # Make sure to use static data for testing purposes
+                with open('../etc/StockTrackerTestData') as f:
+                    read_data = f.read()
+                self.data = json.loads(read_data)
+            else:
+                # Use real data from AlphaVantage if not testing
+                r = self.http.request('GET', self.stockIntraDayUrl)
+                self.data = json.loads(r.data.decode('utf-8'))
+            try:
+                self.data["Meta Data"]
+            except KeyError:
+                raise Exception(self.symbol, self.data)
             self.timestamp = datetime.datetime.now().timestamp()
         else:
             return()
@@ -47,21 +59,30 @@ class StockTracker:
 class TestStockTracker(unittest.TestCase):
 
     def setUp(self):
-        self.s = StockTracker('SEB-A')
+        self.s = StockTracker('TestCase1')
 
-    def test_show(self):
+    def test_basic_functions(self):
         m = self.s.show()
-        self.assertEqual(m["2. Symbol"], 'SEB-A')
+        self.assertEqual(m["2. Symbol"], 'MSFT')
         self.assertEqual(m["4. Interval"], '1min')
         self.assertEqual(m["1. Information"], 'Intraday (1min) prices and volumes')
-
-    def test_lastAveragePrice(self):
         self.assertTrue(isinstance(self.s.lastAveragePrice(), numbers.Real))
+        self.assertEqual(self.s.lastAveragePrice(), 107.8116, 'Not correct last average price calculation')
+
+    def test_refresh(self):
+        ts = self.s.timestamp
+        self.assertNotEqual(self.s.timestamp, 0, 'StockTracker initialized without data')
+        self.s.refresh()
+        self.assertEqual(ts, self.s.timestamp, 'StockTracker always refreshing, but should not')
+        sleep(61)
+        self.s.refresh()
+        self.assertNotEqual(ts, self.s.timestamp, 'StockTracker not updating after one minute of waiting')
 
     def tearDown(self):
         pass
 
 
+# Run test cases when initializing from CLI
 if __name__ == "__main__":
     suite = unittest.TestLoader().loadTestsFromTestCase(TestStockTracker)
     runner = unittest.TextTestRunner(verbosity=3)
